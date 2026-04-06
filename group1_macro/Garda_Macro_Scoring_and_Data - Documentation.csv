@@ -1,0 +1,16 @@
+Consensus Forecasts From Survey of Professional Forecasters,Unnamed: 1,Unnamed: 2,Unnamed: 3,Unnamed: 4,Unnamed: 5,Unnamed: 6,Unnamed: 7,Unnamed: 8
+,,,,,,,,
+GDP: ,,PMI:,,CPI ,,Core CPI,,Unemployment 
+NGDP_Growth ,,,,Mean CPI Level,,Mean Core CPI Level,,Mean Unemployment Level
+"Forecasts for the quarterly and annual level of nominal GDP. Seasonally adjusted, annual rate, billions $. Prior to 1992, these are forecasts for nominal GNP. Annual forecasts are for the annual average of the quarterly levels.",,,,"Forecasts for the headline CPI inflation rate. Seasonally adjusted, annual rate, percentage points. Quarterly forecasts are annualized quarter-overquarter percent changes of the quarterly average price index level. Annual forecasts are fourth-quarter over fourth-quarter percent changes. The quarterly price index level is the quarterly average of the underlying monthly price index levels.",,"Forecasts for the core CPI inflation rate. Seasonally adjusted, annual rate, percentage points. Quarterly forecasts are annualized quarter-over-quarter percent changes of the quarterly average price index level. Annual forecasts are fourth-quarter over fourth-quarter percent changes. The quarterly price index level is the quarterly average of the underlying monthly price index levels.",,"Forecasts for the quarterly average and annual-average unemployment rate. Seasonally adjusted, percentage points. Quarterly forecasts are for the quarterly average of the underlying monthly levels. Annual forecasts are for the annual average of the underlying monthly levels."
+Note: Formula to calculate % change YoY w/ quarterly forecasts Ex.  ,,,,Took Data from next quarter's projection ,,Took Data from next quarter's projection ,,Took Data from next quarter's projection 
+Data from 2025Q1:,,,,,,,,
+%Change = ((2025Q2 Proj / 400 + 1)*(2025Q3 Proj / 400 +1) *(2025Q4 Proj / 400 + 1) * (2026Q1 Proj / 400 + 1) -1) *100),,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+ECB,,,,,,,,
+GDP: ,,,,HICP Forecast: ,,Core Inflation,,Unemployment 
+,,,,,,,,
+"Euro area - Real GDP growth - Average of Point forecasts - Target period ends 12 months after survey cycle begins, Euro area, Annual",,,,"HICP Inflation - Average of Point forecasts - Target period ends 27 months after survey cycle begins, Euro area",,"Euro area - Core inflation - Average of Point forecasts - Target period ends 33 months after survey cycle begins, Euro area, Annual",,Euro area - Unemployment rate - Average of Point forecasts - Target period ends 21 months after survey cycle begins (SPF.A.U2.UNEM.POINT.P21M.Q.AVG)

@@ -1,0 +1,52 @@
+Unnamed: 0,Unnamed: 1,Unnamed: 2,Unnamed: 3,Unnamed: 4,Unnamed: 5,Unnamed: 6,Unnamed: 7,Unnamed: 8,Unnamed: 9,Unnamed: 10
+,,,,,,,,,,
+,Growth Scoring ,,,,Inflation Scoring ,,,,Labor Scoring ,
+,,,,,,,,,,
+,Level (GDP) Score,-0.4180228948,,,Level (CPI) Score,0.06327629094,,,Level  (Unemployment),0.6360111534
+,,,,,,,,,,
+,GDP (Actual),1.10765,,,CPI (Actual),2.434,,,Unemployment (Actual),4.4
+,Historical Average ,2.044950125,,,Historical Average ,2.553926625,,,Historical Average ,5.77125
+,Standard Deviation,2.242221985,,,Standard Deviation,1.895285315,,,Standard Deviation,2.15601565
+,,,,,,,,,,
+,Level (PMI) Score,,,,Level (Core CPI) Score,-0.1789938397,,,,
+,,,,,,,,,,
+,PMI (Actual),52.7,,,Core CPI (Actual),2.90391,,,,
+,Historical Average ,#DIV/0!,,,Historical Average ,2.688588933,,,,
+,Standard Deviation,#DIV/0!,,,Standard Deviation,1.202952391,,,,
+,,,,,,,,,,
+,Surprise  (GDP) Score,-0.89461986,,,Surprise  (CPI) Score,0.2938355487,,,Surprise (Unemployment),0.2100918773
+,,,,,,,,,,
+,GDP Forecast,4.99265605,,,CPI Forecast,2.69,,,Unemployment Forecast,4.42
+,GDP Current Surprise,-3.88500605,,,CPI Current Surprise,-0.256,,,Unemployment Current Surprise,-0.02
+,Average Surprise,-2.569014473,,,Average Surprise,0.2105448148,,,Average Surprise ,-0.1479012346
+,Standard Deviation ,1.471006442,,,Standard Deviation ,1.58777526,,,Standard Deviation ,0.6087871468
+,,,,,,,,,,
+,Surprise (PMI) Score,,,,Surprise (Core CPI) Score,0.2530893168,,,Unemployment is unique case because directional variable is -1 but its average is negative ,
+,,,,,,,,,In this case the actual was less forecast and the double negative makes it positive but the directional variable makes it negative again even though this lower than expected unemployment is positive for the macro environment ,
+,,,,,Core CPI Forecast,2.72,,,,
+,PMI (Actual),52.7,,,Core CPI Current Surprise,0.18391,,,Because of this im wondering if for surprises we should do (Actual - Forecast)/Sdev instead of using the actual stats z score formula because of what it is exactly we want to have the model take into account. ,
+,Consensus Forecast,,,,Average Surprise,0.3830507976,,,"With the regular z scoring it would measure more so how efficient markets are or how well they are pricing information, meaning that worse than expected CPI can end up being positive if the difference is less than the average",
+,Standard Deviation ,,,,Standard Deviation ,0.7868399984,,,,
+,,,,,,,,,,
+,,,,,,,,,,
+,,,,,,,,,,
+,,,,,,,,,,
+,,,,,,,,,,
+,Growth Scoring ,,,,Inflation Scoring,,,,Labor Scoring ,
+,w(level),0.6,,,w(level),0.6,,,w(level),0.6
+,w(surprise),0.4,,,w(surprise),0.4,,,W(surprise),0.4
+,direction ,1,,,direction,-1.0,,,direction ,-1.0
+,,,,,,,,,,
+,GDP Score,-0.6086616809,,,CPI Score,0.155499994,,,Unemployment Score,0.465643443
+,PMI Score,0,,,Core CPI Score,-0.006160577123,,,,
+,,,,,,,,,,
+,,,,,,,,,,
+,w(GDP),0.3,,,w(CPI),0.6,,,w(unemployment),1.0
+,w(PMI),0.7,,,w(Core CPI),0.4,,,,
+,Growth Score,-0.1825985043,,,Inflation Score ,0.09083576557,,,Unemployment Score,0.465643443
+,,,,,,,,,,
+,,,,,,,,,,
+,w(Growth),0.4,,,,,,,,
+,w(Inflation),0.3,,,,,,,,
+,w(Unemployment),0.3,,,,,,,,
+,US Macro Score,0.09390436086,,,,,,,,
