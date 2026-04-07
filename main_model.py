@@ -5,6 +5,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import geopandas as gpd
 from tabulate import tabulate
 
 
@@ -180,19 +181,26 @@ def build_composite_table(macro_df: pd.DataFrame, policy_df: pd.DataFrame, g3_df
         merged[f"{col}_Contribution"] = merged[f"{col}_Scaled"] * weight
 
     merged["Coverage"] = merged[[f"{col}_Present" for col, _ in PILLARS]].sum(axis=1)
-
-    # Because weights sum to 1, summing the weighted contributions automatically
-    # creates the fully adjusted composite score (including the neutral penalties)
     merged["Composite_Score_Adjusted"] = merged[[f"{col}_Contribution" for col, _ in PILLARS]].sum(axis=1)
 
-    merged["Rank"] = merged["Composite_Score_Adjusted"].rank(method="dense", ascending=False).astype(int)
+    # Sorting and Ranking
     merged = merged.sort_values(["Composite_Score_Adjusted", "Coverage"], ascending=[False, False]).reset_index(drop=True)
     merged["Rank"] = merged.index + 1
 
+    # Trade Action logic
     merged["Trade_Action"] = "Neutral"
     if not merged.empty:
         merged.loc[0, "Trade_Action"] = "Long"
         merged.loc[len(merged) - 1, "Trade_Action"] = "Short"
+
+    # Define Regimes based on score thresholds (Matches your Proposal Graph)
+    def get_regime(score):
+        if score >= 0.60: return "Expansion"
+        if score <= 0.40: return "Contraction"
+        return "Recovery/Neutral"
+
+    # CRITICAL: This line must be indented inside the function!
+    merged["Regime"] = merged["Composite_Score_Adjusted"].apply(get_regime)
 
     return merged
 
@@ -300,6 +308,67 @@ def build_report(df: pd.DataFrame, trades: pd.DataFrame) -> str:
     return "\n".join(lines)
 
 
+def render_regime_map(df: pd.DataFrame) -> None:
+    if df.empty:
+        return
+
+    print("Generating Regime Map...")
+    
+    try:
+        import geodatasets
+        # Use ADMIN_0 (Countries) instead of LAND (Physical)
+        path = geodatasets.get_path('naturalearth.admin_0_countries')
+        world = gpd.read_file(path)
+    except Exception as e:
+        print(f"Primary map source failed, trying fallback... ({e})")
+        url = "https://raw.githubusercontent.com/datasets/geo-boundaries-world-110m/master/countries.geojson"
+        world = gpd.read_file(url)
+    
+    # Standardize column names to lowercase to avoid 'Name' vs 'name' issues
+    world.columns = world.columns.str.lower()
+    
+    # Check if 'name' exists, if not, try 'name_en' or 'admin'
+    name_col = 'name'
+    if 'name' not in world.columns:
+        for col in ['name_en', 'admin', 'name_long']:
+            if col in world.columns:
+                name_col = col
+                break
+
+    region_map = {
+        "US": ["United States", "United States of America"],
+        "Europe": ["France", "Germany", "Italy", "Spain", "Poland", "Netherlands", "Belgium"],
+        "Japan": ["Japan"],
+        "UK": ["United Kingdom"],
+        "LatAm": ["Brazil", "Mexico", "Argentina", "Chile", "Colombia", "Peru"]
+    }
+    
+    world['regime_score'] = np.nan
+    for _, row in df.iterrows():
+        countries = region_map.get(row['Region'], [])
+        # Use the name_col we identified
+        world.loc[world[name_col].isin(countries), 'regime_score'] = row['Composite_Score_Adjusted']
+
+    fig, ax = plt.subplots(1, 1, figsize=(15, 8))
+    
+    # Plot with 'RdYlGn'
+    world.plot(
+        column='regime_score', 
+        ax=ax, 
+        cmap='RdYlGn', 
+        legend=True, 
+        missing_kwds={'color': '#f0f0f0'}, 
+        legend_kwds={'label': "Regime Strength", 'orientation': "horizontal", 'pad': 0.05}
+    )
+    
+    ax.set_title("Global Investment Regime Classification", fontsize=16, pad=20)
+    ax.set_axis_off()
+    
+    plt.savefig(OUTPUT_DIR / "regime_map.png", dpi=300, bbox_inches='tight')
+    plt.close(fig)
+    print(f"SUCCESS: Map saved to {OUTPUT_DIR}/regime_map.png")
+
+
 def main() -> None:
     ensure_output_dir()
     
@@ -321,7 +390,7 @@ def main() -> None:
     df = build_composite_table(macro_df, policy_df, g3_df)
     
     print("\n--- Final Merged Composite Data ---")
-    display_cols = ["Rank", "Region", "Macro_Score", "Policy_Score", "Earnings_Score", "AI_Score", "Composite_Score_Adjusted", "Coverage"]
+    display_cols = ["Rank", "Region", "Composite_Score_Adjusted", "Regime", "Coverage"] 
     print(tabulate(df[display_cols].round(3), headers='keys', tablefmt='psql', showindex=False))
 
     # Defensive check: Ensure at least two regions have actual data
@@ -344,6 +413,7 @@ def main() -> None:
     trades.to_csv(OUTPUT_DIR / "trade_ideas.csv", index=False)
 
     render_charts(df)
+    render_regime_map(df)
 
     report_text = build_report(df, trades)
     with open(OUTPUT_DIR / "summary_report.txt", "w", encoding="utf-8") as f:
