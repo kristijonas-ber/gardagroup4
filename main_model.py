@@ -336,12 +336,13 @@ def render_regime_map(df: pd.DataFrame) -> None:
                 break
 
     region_map = {
-        "US": ["United States", "United States of America"],
-        "Europe": ["France", "Germany", "Italy", "Spain", "Poland", "Netherlands", "Belgium"],
-        "Japan": ["Japan"],
-        "UK": ["United Kingdom"],
-        "LatAm": ["Brazil", "Mexico", "Argentina", "Chile", "Colombia", "Peru"]
-    }
+    "US": ["United States of America"],
+    "Europe": ["France", "Germany", "Italy", "Spain", "Poland", "Netherlands", "Belgium", 
+               "Austria", "Portugal", "Greece", "Sweden", "Norway", "Finland", "Denmark", "Switzerland"],
+    "LatAm": ["Brazil", "Mexico", "Argentina", "Chile", "Colombia", "Peru", "Ecuador", "Bolivia", "Paraguay", "Uruguay"],
+    "UK": ["United Kingdom"],
+    "Japan": ["Japan"]
+}
     
     world['regime_score'] = np.nan
     for _, row in df.iterrows():
