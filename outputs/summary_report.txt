@@ -7,22 +7,22 @@ GLOBAL COMPOSITE SCORE REPORT
    - Group 3 Earnings/AI: regional earnings and AI labor signals
 
 2. APPROACH:
-   - Standardize each pillar to a 0-100 comparable scale
-   - Replace missing pillar values with neutral 50 scores
+   - Standardize each pillar to a 0-1 comparable scale
+   - Replace missing pillar values with neutral 0.5 scores
    - Combine weighted pillar scores into an adjusted composite
    - Rank regions and generate trade ideas from the top and bottom regions
 
 3. REGIONAL RANKINGS:
  Rank Region  Composite_Score_Adjusted  Coverage Trade_Action
-    1  LatAm                 62.500000         2         Long
-    2 Europe                 53.125000         1      Neutral
-    3     UK                 46.875000         1      Neutral
-    4     US                 34.943817         3      Neutral
-    5  Japan                 28.286190         3        Short
+    1  LatAm                  0.625000         2         Long
+    2 Europe                  0.531250         1      Neutral
+    3     UK                  0.468750         1      Neutral
+    4     US                  0.349438         3      Neutral
+    5  Japan                  0.282862         3        Short
 
-4. TRADE IDEAS:
-   1. Long LatAm vs Short Japan — Establish a relative-value pair trade: go long LatAm equity or FX exposure and short Japan exposure based on the composite ranking.
-   2. Long LatAm Growth vs Neutral Market — Use LatAm equities, FX, or commodity-linked exposure to capture the region's strongest pillar; the top driver is Earnings.
-   3. Directional Trade: LatAm over Japan — If LatAm remains the strongest region, consider an overweight in LatAm and an underweight in Japan across the same asset class (e.g. equities or FX).
+4. GENERATED TRADE SIGNALS:
+ Idea_ID             Trade_Type Long_Leg        Short_Leg Primary_Driver
+       1    Relative Value Pair    LatAm            Japan       Earnings
+       2 Outright Beta / Growth    LatAm Market Benchmark       Earnings
 
 Charts saved to outputs/composite_scores_chart.png and outputs/pillar_contributions_chart.png

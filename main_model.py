@@ -42,7 +42,12 @@ PILLAR_WEIGHTS = {
     "Earnings_Score": 0.25,
     "AI_Score": 0.25,
 }
-NEUTRAL_SCORE = 50.0
+NEUTRAL_SCORE = 0.5
+
+WARNINGS: list[str] = []
+
+def append_warning(message: str) -> None:
+    WARNINGS.append(message)
 
 
 def ensure_output_dir() -> None:
@@ -62,7 +67,7 @@ def load_group1_macro() -> pd.DataFrame:
     records = []
     for region, path in GROUP1_MACRO_PATHS.items():
         if not path.exists():
-            print(f"Warning: missing macro source for {region}: {path}")
+            append_warning(f"Missing macro source for {region}: {path}")
             continue
         df = pd.read_csv(path)
         if df.empty:
@@ -106,7 +111,7 @@ def load_group1_macro() -> pd.DataFrame:
 def load_group2_policy() -> pd.DataFrame:
     path = SCRIPT_DIR / "group2_policy" / "outputs" / "2_daily_macro_scores_by_bank.csv"
     if not path.exists():
-        print(f"Warning: missing policy file {path}")
+        append_warning(f"Missing policy file: {path}")
         return pd.DataFrame(columns=["Region", "Policy_Score"])
     df = pd.read_csv(path)
     df["Region"] = df["Source_Bank"].map(POLICY_REGION_MAP)
@@ -121,7 +126,7 @@ def load_group3_earnings_ai() -> pd.DataFrame:
     earnings_path = SCRIPT_DIR / "group3_earnings" / "output" / "regional_earnings_scores.csv"
     ai_path = SCRIPT_DIR / "group3_earnings" / "output" / "regional_ai_scores.csv"
     if not earnings_path.exists() or not ai_path.exists():
-        print(f"Warning: missing Group 3 outputs: {earnings_path} or {ai_path}")
+        append_warning(f"Missing Group 3 outputs: {earnings_path} or {ai_path}")
         return pd.DataFrame(columns=["Region", "Earnings_Score", "AI_Score"])
 
     df_earn = pd.read_csv(earnings_path)
@@ -140,7 +145,7 @@ def load_group3_earnings_ai() -> pd.DataFrame:
     return df_g3
 
 
-def scale_to_range(series: pd.Series, minimum: float = 0.0, maximum: float = 100.0) -> pd.Series:
+def scale_to_range(series: pd.Series, minimum: float = 0.0, maximum: float = 1.0) -> pd.Series:
     numeric = pd.to_numeric(series, errors="coerce")
     if numeric.dropna().empty:
         return pd.Series([NEUTRAL_SCORE] * len(series), index=series.index)
@@ -195,66 +200,35 @@ def build_composite_table() -> pd.DataFrame:
 
 
 def build_trade_ideas(df: pd.DataFrame) -> pd.DataFrame:
-    if df.empty:
-        return pd.DataFrame(
-            [
-                {
-                    "Idea_ID": 1,
-                    "Title": "Insufficient data",
-                    "Trade_Description": "Not enough regional scores to generate trade ideas.",
-                    "Primary_Region": "N/A",
-                    "Secondary_Region": "N/A",
-                    "Confidence": "Low",
-                }
-            ]
-        )
+    """
+    Generates structured, quantitative trade signals based on the composite table rankings.
+    """
+    if df.empty or len(df) < 2:
+        return pd.DataFrame(columns=["Idea_ID", "Trade_Type", "Long_Leg", "Short_Leg", "Primary_Driver"])
 
     top = df.iloc[0]
     bottom = df.iloc[-1]
+    
+    # Identify the highest scoring component for the top ranked region
     top_pillar = df[[f"{col}_Scaled" for col, _ in PILLARS]].loc[top.name].idxmax().replace("_Scaled", "")
     top_pillar_name = next(label for col, label in PILLARS if col == top_pillar)
 
     ideas = [
         {
             "Idea_ID": 1,
-            "Title": f"Long {top['Region']} vs Short {bottom['Region']}",
-            "Trade_Description": (
-                f"Establish a relative-value pair trade: go long {top['Region']} equity or FX exposure "
-                f"and short {bottom['Region']} exposure based on the composite ranking."
-            ),
-            "Primary_Region": top["Region"],
-            "Secondary_Region": bottom["Region"],
-            "Score_Driver": top_pillar_name,
-            "Confidence": "Medium",
+            "Trade_Type": "Relative Value Pair",
+            "Long_Leg": top["Region"],
+            "Short_Leg": bottom["Region"],
+            "Primary_Driver": top_pillar_name,
         },
         {
             "Idea_ID": 2,
-            "Title": f"Long {top['Region']} Growth vs Neutral Market",
-            "Trade_Description": (
-                f"Use {top['Region']} equities, FX, or commodity-linked exposure to capture the region's strongest pillar; "
-                f"the top driver is {top_pillar_name}."
-            ),
-            "Primary_Region": top["Region"],
-            "Secondary_Region": "Market Benchmark",
-            "Score_Driver": top_pillar_name,
-            "Confidence": "Medium",
-        },
-    ]
-
-    if top["Region"] != bottom["Region"]:
-        additional = {
-            "Idea_ID": 3,
-            "Title": f"Directional Trade: {top['Region']} over {bottom['Region']}",
-            "Trade_Description": (
-                f"If {top['Region']} remains the strongest region, consider an overweight in {top['Region']} and an underweight in "
-                f"{bottom['Region']} across the same asset class (e.g. equities or FX)."
-            ),
-            "Primary_Region": top["Region"],
-            "Secondary_Region": bottom["Region"],
-            "Score_Driver": "Composite",
-            "Confidence": "Medium",
+            "Trade_Type": "Outright Beta / Growth",
+            "Long_Leg": top["Region"],
+            "Short_Leg": "Market Benchmark",
+            "Primary_Driver": top_pillar_name,
         }
-        ideas.append(additional)
+    ]
 
     return pd.DataFrame(ideas)
 
@@ -269,7 +243,7 @@ def render_charts(df: pd.DataFrame) -> None:
     ax.set_xlabel("Adjusted Composite Score")
     ax.set_title("Regional Composite Score Ranking")
     for i, score in enumerate(df["Composite_Score_Adjusted"]):
-        ax.text(score + 1.0, i, f"{score:.1f}", va="center")
+        ax.text(score + 0.01, i, f"{score:.2f}", va="center")
     plt.tight_layout()
     plt.savefig(OUTPUT_DIR / "composite_scores_chart.png", dpi=300)
     plt.close(fig)
@@ -280,14 +254,12 @@ def render_charts(df: pd.DataFrame) -> None:
     for col, label in PILLARS:
         ax.barh(df["Region"], df[f"{col}_Scaled"], left=bottom, label=label)
         bottom += df[f"{col}_Scaled"].values
-    ax.set_xlabel("Scaled Pillar Scores (0-100)")
+    ax.set_xlabel("Scaled Pillar Scores (0-1)")
     ax.set_title("Pillar Contribution by Region")
     ax.legend(loc="lower right")
     plt.tight_layout()
     plt.savefig(OUTPUT_DIR / "pillar_contributions_chart.png", dpi=300)
     plt.close(fig)
-
-    print(f"Saved charts: {OUTPUT_DIR / 'composite_scores_chart.png'}, {OUTPUT_DIR / 'pillar_contributions_chart.png'}")
 
 
 def build_report(df: pd.DataFrame, trades: pd.DataFrame) -> str:
@@ -295,25 +267,39 @@ def build_report(df: pd.DataFrame, trades: pd.DataFrame) -> str:
         "GLOBAL COMPOSITE SCORE REPORT",
         "===============================================",
         "",
+    ]
+
+    if WARNINGS:
+        lines.append("WARNINGS:")
+        for warning in WARNINGS:
+            lines.append(f"   - {warning}")
+        lines.append("")
+
+    lines.extend([
         "1. DATA SOURCES:",
         "   - Group 1 Macro: US, Europe, Japan latest macro metrics",
         "   - Group 2 Policy: central bank NLP daily macro sentiment",
         "   - Group 3 Earnings/AI: regional earnings and AI labor signals",
         "",
         "2. APPROACH:",
-        "   - Standardize each pillar to a 0-100 comparable scale",
-        "   - Replace missing pillar values with neutral 50 scores",
+        "   - Standardize each pillar to a 0-1 comparable scale",
+        "   - Replace missing pillar values with neutral 0.5 scores",
         "   - Combine weighted pillar scores into an adjusted composite",
         "   - Rank regions and generate trade ideas from the top and bottom regions",
         "",
         "3. REGIONAL RANKINGS:",
-    ]
+    ])
     lines.append(df[["Rank", "Region", "Composite_Score_Adjusted", "Coverage", "Trade_Action"]].to_string(index=False))
     lines.extend([
         "",
-        "4. TRADE IDEAS:",
+        "4. GENERATED TRADE SIGNALS:",
     ])
-    lines.extend(trades.apply(lambda row: f"   {row['Idea_ID']}. {row['Title']} — {row['Trade_Description']}", axis=1).tolist())
+    
+    if trades.empty:
+        lines.append("   [Insufficient data to generate trade signals]")
+    else:
+        lines.append(trades.to_string(index=False))
+        
     lines.append("")
     lines.append("Charts saved to outputs/composite_scores_chart.png and outputs/pillar_contributions_chart.png")
     return "\n".join(lines)
@@ -333,10 +319,8 @@ def main() -> None:
     render_charts(df)
 
     report_text = build_report(df, trades)
-    print(report_text)
     with open(OUTPUT_DIR / "summary_report.txt", "w", encoding="utf-8") as f:
         f.write(report_text)
-    print(f"Saved outputs in {OUTPUT_DIR}")
 
 
 if __name__ == "__main__":
