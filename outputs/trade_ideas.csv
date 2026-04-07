@@ -1,0 +1,4 @@
+Idea_ID,Title,Trade_Description,Primary_Region,Secondary_Region,Score_Driver,Confidence
+1,Long LatAm vs Short Japan,Establish a relative-value pair trade: go long LatAm equity or FX exposure and short Japan exposure based on the composite ranking.,LatAm,Japan,Earnings,Medium
+2,Long LatAm Growth vs Neutral Market,"Use LatAm equities, FX, or commodity-linked exposure to capture the region's strongest pillar; the top driver is Earnings.",LatAm,Market Benchmark,Earnings,Medium
+3,Directional Trade: LatAm over Japan,"If LatAm remains the strongest region, consider an overweight in LatAm and an underweight in Japan across the same asset class (e.g. equities or FX).",LatAm,Japan,Composite,Medium

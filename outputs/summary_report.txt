@@ -1,26 +1,28 @@
-====================================================
-GROUP 4: INTEGRATION & PORTFOLIO OUTPUT - FINAL REPORT
-====================================================
+GLOBAL COMPOSITE SCORE REPORT
+===============================================
 
-PIPELINE EXECUTION EXPLANATION:
---------------------------------
-1. Macro Data (Group 1): Extracted the most recent row of data for GDP YoY, Core CPI, and Unemployment. Core CPI and Unemployment were inverted so that lower values yield a positive impact. These three metrics were Z-scored and averaged to create the 'Macro_Score'.
-2. Policy Data (Group 2): Mapped central bank sources to our standard regions (e.g., 'Bank of England' to 'UK'). Averaged the NLP-derived daily macro sentiment scores into a single 'Policy_Score'.
-3. Earnings & AI Data (Group 3): Merged regional earnings and AI scores. Mapped regions for cross-group consistency ('North_America' -> 'US', 'Asia_Pacific' -> 'Japan').
-4. Integration & Standardization: Outer merged all datasets. Any missing signals (e.g., LatAm lacks Macro data, UK lacks Earnings data) were standardized to a Z-score of 0.0. This ensures a missing signal is treated as strictly "neutral" relative to the peer group rather than dropping the region entirely.
-5. Composite Generation: Averaged the standardized Z-scores across all four pillars (Macro, Policy, Earnings, AI) to create the 'Composite_Score'.
-6. Trade Logic: Ranked regions from highest to lowest composite score. The top-ranked region is mapped to 'Long', the bottom-ranked to 'Short', and the rest to 'Neutral'.
+1. DATA SOURCES:
+   - Group 1 Macro: US, Europe, Japan latest macro metrics
+   - Group 2 Policy: central bank NLP daily macro sentiment
+   - Group 3 Earnings/AI: regional earnings and AI labor signals
 
---- FINAL GLOBAL MACRO COMPOSITE RANKINGS ---
- Rank Region  Composite_Score Trade_Action
-    1  LatAm         0.698486         Long
-    2 Europe         0.396268      Neutral
-    3     US        -0.296049      Neutral
-    4     UK        -0.296301      Neutral
-    5  Japan        -0.502404        Short
+2. APPROACH:
+   - Standardize each pillar to a 0-100 comparable scale
+   - Replace missing pillar values with neutral 50 scores
+   - Combine weighted pillar scores into an adjusted composite
+   - Rank regions and generate trade ideas from the top and bottom regions
 
---- TRADE IDEAS ---
-1. Cross-Asset Relative Value: Go Long LatAm Equities/FX vs. Short Japan Equities/FX
+3. REGIONAL RANKINGS:
+ Rank Region  Composite_Score_Adjusted  Coverage Trade_Action
+    1  LatAm                 62.500000         2         Long
+    2 Europe                 53.125000         1      Neutral
+    3     UK                 46.875000         1      Neutral
+    4     US                 34.943817         3      Neutral
+    5  Japan                 28.286190         3        Short
 
-Note: As LatAm ranked #1 entirely due to outsized positive signals in Group 3 (with Group 1 and 2 defaulting to 0), a discretionary portfolio manager should investigate LatAm earnings strength before executing.
-====================================================
+4. TRADE IDEAS:
+   1. Long LatAm vs Short Japan — Establish a relative-value pair trade: go long LatAm equity or FX exposure and short Japan exposure based on the composite ranking.
+   2. Long LatAm Growth vs Neutral Market — Use LatAm equities, FX, or commodity-linked exposure to capture the region's strongest pillar; the top driver is Earnings.
+   3. Directional Trade: LatAm over Japan — If LatAm remains the strongest region, consider an overweight in LatAm and an underweight in Japan across the same asset class (e.g. equities or FX).
+
+Charts saved to outputs/composite_scores_chart.png and outputs/pillar_contributions_chart.png

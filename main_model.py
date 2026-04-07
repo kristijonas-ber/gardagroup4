@@ -1,0 +1,343 @@
+import os
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+OUTPUT_DIR = SCRIPT_DIR / "outputs"
+
+REGION_ORDER = ["US", "Europe", "Japan", "UK", "LatAm"]
+
+GROUP1_MACRO_PATHS = {
+    "US": SCRIPT_DIR / "group1_macro" / "US.csv",
+    "Europe": SCRIPT_DIR / "group1_macro" / "Europe.csv",
+    "Japan": SCRIPT_DIR / "group1_macro" / "Japan.csv",
+}
+
+POLICY_REGION_MAP = {
+    "US Federal Reserve": "US",
+    "European Central Bank": "Europe",
+    "Bank of Japan": "Japan",
+    "Bank of England": "UK",
+}
+
+EARNINGS_REGION_MAP = {
+    "North_America": "US",
+    "Asia_Pacific": "Japan",
+    "Latin_America": "LatAm",
+}
+
+PILLARS = [
+    ("Macro_Score", "Macro"),
+    ("Policy_Score", "Policy"),
+    ("Earnings_Score", "Earnings"),
+    ("AI_Score", "AI"),
+]
+PILLAR_WEIGHTS = {
+    "Macro_Score": 0.25,
+    "Policy_Score": 0.25,
+    "Earnings_Score": 0.25,
+    "AI_Score": 0.25,
+}
+NEUTRAL_SCORE = 50.0
+
+
+def ensure_output_dir() -> None:
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def safe_float(value):
+    try:
+        if isinstance(value, str):
+            return float(value.replace(",", "").strip())
+        return float(value)
+    except Exception:
+        return np.nan
+
+
+def load_group1_macro() -> pd.DataFrame:
+    records = []
+    for region, path in GROUP1_MACRO_PATHS.items():
+        if not path.exists():
+            print(f"Warning: missing macro source for {region}: {path}")
+            continue
+        df = pd.read_csv(path)
+        if df.empty:
+            continue
+        latest = df.iloc[-1]
+        if region == "US":
+            values = {
+                "GDP_Growth": safe_float(latest.get("GDP YoY % Change")),
+                "Core_CPI_Inv": -safe_float(latest.get("Core CPI")),
+                "Unemp_Inv": -safe_float(latest.get("Unemployment Levels %")),
+            }
+        elif region == "Europe":
+            values = {
+                "GDP_Growth": safe_float(latest.get("GDP Growth")),
+                "Core_CPI_Inv": -safe_float(latest.get("Core HICP")),
+                "Unemp_Inv": -safe_float(latest.get("Unemployment")),
+            }
+        elif region == "Japan":
+            values = {
+                "GDP_Growth": safe_float(latest.get("GDP YoY % Change")),
+                "Core_CPI_Inv": -safe_float(latest.get("Core CPI")),
+                "Unemp_Inv": -safe_float(latest.get("Unemployment Levels %")),
+            }
+        else:
+            values = {}
+
+        records.append({"Region": region, **values})
+
+    df_macro = pd.DataFrame(records)
+    if df_macro.empty:
+        return pd.DataFrame(columns=["Region", "Macro_Score"])
+
+    for metric in ["GDP_Growth", "Core_CPI_Inv", "Unemp_Inv"]:
+        df_macro[f"{metric}_Z"] = (df_macro[metric] - df_macro[metric].mean()) / df_macro[metric].std(ddof=0)
+
+    df_macro["Macro_Score"] = df_macro[["GDP_Growth_Z", "Core_CPI_Inv_Z", "Unemp_Inv_Z"]].mean(axis=1)
+    df_macro = df_macro[["Region", "Macro_Score"]]
+    return df_macro
+
+
+def load_group2_policy() -> pd.DataFrame:
+    path = SCRIPT_DIR / "group2_policy" / "outputs" / "2_daily_macro_scores_by_bank.csv"
+    if not path.exists():
+        print(f"Warning: missing policy file {path}")
+        return pd.DataFrame(columns=["Region", "Policy_Score"])
+    df = pd.read_csv(path)
+    df["Region"] = df["Source_Bank"].map(POLICY_REGION_MAP)
+    df = df.dropna(subset=["Region"])
+    df["Daily_Macro_Score"] = pd.to_numeric(df["Daily_Macro_Score"], errors="coerce")
+    df_policy = df.groupby("Region")["Daily_Macro_Score"].mean().reset_index()
+    df_policy.rename(columns={"Daily_Macro_Score": "Policy_Score"}, inplace=True)
+    return df_policy
+
+
+def load_group3_earnings_ai() -> pd.DataFrame:
+    earnings_path = SCRIPT_DIR / "group3_earnings" / "output" / "regional_earnings_scores.csv"
+    ai_path = SCRIPT_DIR / "group3_earnings" / "output" / "regional_ai_scores.csv"
+    if not earnings_path.exists() or not ai_path.exists():
+        print(f"Warning: missing Group 3 outputs: {earnings_path} or {ai_path}")
+        return pd.DataFrame(columns=["Region", "Earnings_Score", "AI_Score"])
+
+    df_earn = pd.read_csv(earnings_path)
+    df_ai = pd.read_csv(ai_path)
+
+    df_earn["Region"] = df_earn["region"].map(EARNINGS_REGION_MAP).fillna(df_earn["region"])
+    df_ai["Region"] = df_ai["region"].map(EARNINGS_REGION_MAP).fillna(df_ai["region"])
+
+    df_g3 = pd.merge(
+        df_earn[["Region", "earnings_composite"]],
+        df_ai[["Region", "ai_labor_score"]],
+        on="Region",
+        how="outer",
+    )
+    df_g3.rename(columns={"earnings_composite": "Earnings_Score", "ai_labor_score": "AI_Score"}, inplace=True)
+    return df_g3
+
+
+def scale_to_range(series: pd.Series, minimum: float = 0.0, maximum: float = 100.0) -> pd.Series:
+    numeric = pd.to_numeric(series, errors="coerce")
+    if numeric.dropna().empty:
+        return pd.Series([NEUTRAL_SCORE] * len(series), index=series.index)
+    min_val = numeric.min()
+    max_val = numeric.max()
+    if min_val == max_val:
+        return pd.Series([NEUTRAL_SCORE] * len(series), index=series.index)
+    scaled = (numeric - min_val) / (max_val - min_val) * (maximum - minimum) + minimum
+    return scaled.clip(lower=minimum, upper=maximum)
+
+
+def build_composite_table() -> pd.DataFrame:
+    macro_df = load_group1_macro()
+    policy_df = load_group2_policy()
+    g3_df = load_group3_earnings_ai()
+
+    merged = pd.DataFrame({"Region": REGION_ORDER})
+    merged = merged.merge(macro_df, on="Region", how="left")
+    merged = merged.merge(policy_df, on="Region", how="left")
+    merged = merged.merge(g3_df, on="Region", how="left")
+
+    for col, _ in PILLARS:
+        merged[col] = pd.to_numeric(merged[col], errors="coerce")
+        merged[f"{col}_Scaled"] = scale_to_range(merged[col])
+        merged[f"{col}_Scaled"] = merged[f"{col}_Scaled"].fillna(NEUTRAL_SCORE)
+        merged[f"{col}_Present"] = merged[col].notna().astype(int)
+
+    merged["Coverage"] = merged[[f"{col}_Present" for col, _ in PILLARS]].sum(axis=1)
+    merged["Coverage_Ratio"] = merged["Coverage"] / len(PILLARS)
+
+    weighted = []
+    for col, _ in PILLARS:
+        weight = PILLAR_WEIGHTS.get(col, 0.0)
+        weighted.append(merged[f"{col}_Scaled"] * weight)
+    merged["Composite_Score"] = pd.concat(weighted, axis=1).sum(axis=1)
+
+    merged["Composite_Score_Adjusted"] = (
+        merged["Composite_Score"] * merged["Coverage_Ratio"]
+        + NEUTRAL_SCORE * (1.0 - merged["Coverage_Ratio"])
+    )
+
+    merged["Rank"] = merged["Composite_Score_Adjusted"].rank(method="dense", ascending=False).astype(int)
+    merged = merged.sort_values(["Composite_Score_Adjusted", "Coverage"], ascending=[False, False]).reset_index(drop=True)
+    merged["Rank"] = merged.index + 1
+
+    merged["Trade_Action"] = "Neutral"
+    if not merged.empty:
+        merged.loc[0, "Trade_Action"] = "Long"
+        merged.loc[len(merged) - 1, "Trade_Action"] = "Short"
+
+    return merged
+
+
+def build_trade_ideas(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return pd.DataFrame(
+            [
+                {
+                    "Idea_ID": 1,
+                    "Title": "Insufficient data",
+                    "Trade_Description": "Not enough regional scores to generate trade ideas.",
+                    "Primary_Region": "N/A",
+                    "Secondary_Region": "N/A",
+                    "Confidence": "Low",
+                }
+            ]
+        )
+
+    top = df.iloc[0]
+    bottom = df.iloc[-1]
+    top_pillar = df[[f"{col}_Scaled" for col, _ in PILLARS]].loc[top.name].idxmax().replace("_Scaled", "")
+    top_pillar_name = next(label for col, label in PILLARS if col == top_pillar)
+
+    ideas = [
+        {
+            "Idea_ID": 1,
+            "Title": f"Long {top['Region']} vs Short {bottom['Region']}",
+            "Trade_Description": (
+                f"Establish a relative-value pair trade: go long {top['Region']} equity or FX exposure "
+                f"and short {bottom['Region']} exposure based on the composite ranking."
+            ),
+            "Primary_Region": top["Region"],
+            "Secondary_Region": bottom["Region"],
+            "Score_Driver": top_pillar_name,
+            "Confidence": "Medium",
+        },
+        {
+            "Idea_ID": 2,
+            "Title": f"Long {top['Region']} Growth vs Neutral Market",
+            "Trade_Description": (
+                f"Use {top['Region']} equities, FX, or commodity-linked exposure to capture the region's strongest pillar; "
+                f"the top driver is {top_pillar_name}."
+            ),
+            "Primary_Region": top["Region"],
+            "Secondary_Region": "Market Benchmark",
+            "Score_Driver": top_pillar_name,
+            "Confidence": "Medium",
+        },
+    ]
+
+    if top["Region"] != bottom["Region"]:
+        additional = {
+            "Idea_ID": 3,
+            "Title": f"Directional Trade: {top['Region']} over {bottom['Region']}",
+            "Trade_Description": (
+                f"If {top['Region']} remains the strongest region, consider an overweight in {top['Region']} and an underweight in "
+                f"{bottom['Region']} across the same asset class (e.g. equities or FX)."
+            ),
+            "Primary_Region": top["Region"],
+            "Secondary_Region": bottom["Region"],
+            "Score_Driver": "Composite",
+            "Confidence": "Medium",
+        }
+        ideas.append(additional)
+
+    return pd.DataFrame(ideas)
+
+
+def render_charts(df: pd.DataFrame) -> None:
+    if df.empty:
+        return
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    colors = ["#2ca02c" if action == "Long" else "#d62728" if action == "Short" else "#7f7f7f" for action in df["Trade_Action"]]
+    ax.barh(df["Region"], df["Composite_Score_Adjusted"], color=colors)
+    ax.set_xlabel("Adjusted Composite Score")
+    ax.set_title("Regional Composite Score Ranking")
+    for i, score in enumerate(df["Composite_Score_Adjusted"]):
+        ax.text(score + 1.0, i, f"{score:.1f}", va="center")
+    plt.tight_layout()
+    plt.savefig(OUTPUT_DIR / "composite_scores_chart.png", dpi=300)
+    plt.close(fig)
+
+    pillar_cols = [f"{col}_Scaled" for col, _ in PILLARS]
+    fig, ax = plt.subplots(figsize=(10, 6))
+    bottom = np.zeros(len(df))
+    for col, label in PILLARS:
+        ax.barh(df["Region"], df[f"{col}_Scaled"], left=bottom, label=label)
+        bottom += df[f"{col}_Scaled"].values
+    ax.set_xlabel("Scaled Pillar Scores (0-100)")
+    ax.set_title("Pillar Contribution by Region")
+    ax.legend(loc="lower right")
+    plt.tight_layout()
+    plt.savefig(OUTPUT_DIR / "pillar_contributions_chart.png", dpi=300)
+    plt.close(fig)
+
+    print(f"Saved charts: {OUTPUT_DIR / 'composite_scores_chart.png'}, {OUTPUT_DIR / 'pillar_contributions_chart.png'}")
+
+
+def build_report(df: pd.DataFrame, trades: pd.DataFrame) -> str:
+    lines = [
+        "GLOBAL COMPOSITE SCORE REPORT",
+        "===============================================",
+        "",
+        "1. DATA SOURCES:",
+        "   - Group 1 Macro: US, Europe, Japan latest macro metrics",
+        "   - Group 2 Policy: central bank NLP daily macro sentiment",
+        "   - Group 3 Earnings/AI: regional earnings and AI labor signals",
+        "",
+        "2. APPROACH:",
+        "   - Standardize each pillar to a 0-100 comparable scale",
+        "   - Replace missing pillar values with neutral 50 scores",
+        "   - Combine weighted pillar scores into an adjusted composite",
+        "   - Rank regions and generate trade ideas from the top and bottom regions",
+        "",
+        "3. REGIONAL RANKINGS:",
+    ]
+    lines.append(df[["Rank", "Region", "Composite_Score_Adjusted", "Coverage", "Trade_Action"]].to_string(index=False))
+    lines.extend([
+        "",
+        "4. TRADE IDEAS:",
+    ])
+    lines.extend(trades.apply(lambda row: f"   {row['Idea_ID']}. {row['Title']} — {row['Trade_Description']}", axis=1).tolist())
+    lines.append("")
+    lines.append("Charts saved to outputs/composite_scores_chart.png and outputs/pillar_contributions_chart.png")
+    return "\n".join(lines)
+
+
+def main() -> None:
+    ensure_output_dir()
+    df = build_composite_table()
+    trades = build_trade_ideas(df)
+
+    df.to_csv(OUTPUT_DIR / "final_composite_score_table.csv", index=False)
+    df[["Rank", "Region", "Composite_Score_Adjusted", "Coverage", "Trade_Action"]].to_csv(
+        OUTPUT_DIR / "regional_rankings.csv", index=False
+    )
+    trades.to_csv(OUTPUT_DIR / "trade_ideas.csv", index=False)
+
+    render_charts(df)
+
+    report_text = build_report(df, trades)
+    print(report_text)
+    with open(OUTPUT_DIR / "summary_report.txt", "w", encoding="utf-8") as f:
+        f.write(report_text)
+    print(f"Saved outputs in {OUTPUT_DIR}")
+
+
+if __name__ == "__main__":
+    main()
