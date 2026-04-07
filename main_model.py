@@ -1,9 +1,11 @@
 import os
+import sys
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from tabulate import tabulate
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -36,11 +38,13 @@ PILLARS = [
     ("Earnings_Score", "Earnings"),
     ("AI_Score", "AI"),
 ]
+
+# Updated to custom weighting
 PILLAR_WEIGHTS = {
-    "Macro_Score": 0.25,
-    "Policy_Score": 0.25,
-    "Earnings_Score": 0.25,
-    "AI_Score": 0.25,
+    "Macro_Score": 0.30,
+    "Policy_Score": 0.30,
+    "Earnings_Score": 0.20,
+    "AI_Score": 0.20,
 }
 NEUTRAL_SCORE = 0.5
 
@@ -157,11 +161,7 @@ def scale_to_range(series: pd.Series, minimum: float = 0.0, maximum: float = 1.0
     return scaled.clip(lower=minimum, upper=maximum)
 
 
-def build_composite_table() -> pd.DataFrame:
-    macro_df = load_group1_macro()
-    policy_df = load_group2_policy()
-    g3_df = load_group3_earnings_ai()
-
+def build_composite_table(macro_df: pd.DataFrame, policy_df: pd.DataFrame, g3_df: pd.DataFrame) -> pd.DataFrame:
     merged = pd.DataFrame({"Region": REGION_ORDER})
     merged = merged.merge(macro_df, on="Region", how="left")
     merged = merged.merge(policy_df, on="Region", how="left")
@@ -170,22 +170,20 @@ def build_composite_table() -> pd.DataFrame:
     for col, _ in PILLARS:
         merged[col] = pd.to_numeric(merged[col], errors="coerce")
         merged[f"{col}_Scaled"] = scale_to_range(merged[col])
-        merged[f"{col}_Scaled"] = merged[f"{col}_Scaled"].fillna(NEUTRAL_SCORE)
         merged[f"{col}_Present"] = merged[col].notna().astype(int)
+        
+        # Fill missing values with neutral score
+        merged[f"{col}_Scaled"] = merged[f"{col}_Scaled"].fillna(NEUTRAL_SCORE)
+        
+        # Calculate Weighted Contribution
+        weight = PILLAR_WEIGHTS.get(col, 0.0)
+        merged[f"{col}_Contribution"] = merged[f"{col}_Scaled"] * weight
 
     merged["Coverage"] = merged[[f"{col}_Present" for col, _ in PILLARS]].sum(axis=1)
-    merged["Coverage_Ratio"] = merged["Coverage"] / len(PILLARS)
 
-    weighted = []
-    for col, _ in PILLARS:
-        weight = PILLAR_WEIGHTS.get(col, 0.0)
-        weighted.append(merged[f"{col}_Scaled"] * weight)
-    merged["Composite_Score"] = pd.concat(weighted, axis=1).sum(axis=1)
-
-    merged["Composite_Score_Adjusted"] = (
-        merged["Composite_Score"] * merged["Coverage_Ratio"]
-        + NEUTRAL_SCORE * (1.0 - merged["Coverage_Ratio"])
-    )
+    # Because weights sum to 1, summing the weighted contributions automatically
+    # creates the fully adjusted composite score (including the neutral penalties)
+    merged["Composite_Score_Adjusted"] = merged[[f"{col}_Contribution" for col, _ in PILLARS]].sum(axis=1)
 
     merged["Rank"] = merged["Composite_Score_Adjusted"].rank(method="dense", ascending=False).astype(int)
     merged = merged.sort_values(["Composite_Score_Adjusted", "Coverage"], ascending=[False, False]).reset_index(drop=True)
@@ -200,12 +198,6 @@ def build_composite_table() -> pd.DataFrame:
 
 
 def build_trade_ideas(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Generates structured, quantitative trade signals based on the composite table rankings.
-    """
-    if df.empty or len(df) < 2:
-        return pd.DataFrame(columns=["Idea_ID", "Trade_Type", "Long_Leg", "Short_Leg", "Primary_Driver"])
-
     top = df.iloc[0]
     bottom = df.iloc[-1]
     
@@ -237,6 +229,7 @@ def render_charts(df: pd.DataFrame) -> None:
     if df.empty:
         return
 
+    # Chart 1: Composite Score Ranking
     fig, ax = plt.subplots(figsize=(10, 6))
     colors = ["#2ca02c" if action == "Long" else "#d62728" if action == "Short" else "#7f7f7f" for action in df["Trade_Action"]]
     ax.barh(df["Region"], df["Composite_Score_Adjusted"], color=colors)
@@ -248,13 +241,14 @@ def render_charts(df: pd.DataFrame) -> None:
     plt.savefig(OUTPUT_DIR / "composite_scores_chart.png", dpi=300)
     plt.close(fig)
 
-    pillar_cols = [f"{col}_Scaled" for col, _ in PILLARS]
+    # Chart 2: Stacked Contributions (now perfectly aligns with Chart 1)
     fig, ax = plt.subplots(figsize=(10, 6))
     bottom = np.zeros(len(df))
     for col, label in PILLARS:
-        ax.barh(df["Region"], df[f"{col}_Scaled"], left=bottom, label=label)
-        bottom += df[f"{col}_Scaled"].values
-    ax.set_xlabel("Scaled Pillar Scores (0-1)")
+        ax.barh(df["Region"], df[f"{col}_Contribution"], left=bottom, label=label)
+        bottom += df[f"{col}_Contribution"].values
+    
+    ax.set_xlabel("Weighted Pillar Contribution (Adds exactly to Composite Score)")
     ax.set_title("Pillar Contribution by Region")
     ax.legend(loc="lower right")
     plt.tight_layout()
@@ -284,7 +278,8 @@ def build_report(df: pd.DataFrame, trades: pd.DataFrame) -> str:
         "2. APPROACH:",
         "   - Standardize each pillar to a 0-1 comparable scale",
         "   - Replace missing pillar values with neutral 0.5 scores",
-        "   - Combine weighted pillar scores into an adjusted composite",
+        "   - Apply strategic weights (Macro: 30%, Policy: 30%, Earnings: 20%, AI: 20%)",
+        "   - Sum weighted scores into the final adjusted composite",
         "   - Rank regions and generate trade ideas from the top and bottom regions",
         "",
         "3. REGIONAL RANKINGS:",
@@ -307,9 +302,41 @@ def build_report(df: pd.DataFrame, trades: pd.DataFrame) -> str:
 
 def main() -> None:
     ensure_output_dir()
-    df = build_composite_table()
-    trades = build_trade_ideas(df)
+    
+    print("Loading Group 1: Macro Data...")
+    macro_df = load_group1_macro()
+    if not macro_df.empty:
+        print(tabulate(macro_df.round(3), headers='keys', tablefmt='psql', showindex=False))
+        
+    print("\nLoading Group 2: Policy Data...")
+    policy_df = load_group2_policy()
+    if not policy_df.empty:
+        print(tabulate(policy_df.round(3), headers='keys', tablefmt='psql', showindex=False))
+        
+    print("\nLoading Group 3: Earnings & AI Data...")
+    g3_df = load_group3_earnings_ai()
+    if not g3_df.empty:
+        print(tabulate(g3_df.round(3), headers='keys', tablefmt='psql', showindex=False))
 
+    df = build_composite_table(macro_df, policy_df, g3_df)
+    
+    print("\n--- Final Merged Composite Data ---")
+    display_cols = ["Rank", "Region", "Macro_Score", "Policy_Score", "Earnings_Score", "AI_Score", "Composite_Score_Adjusted", "Coverage"]
+    print(tabulate(df[display_cols].round(3), headers='keys', tablefmt='psql', showindex=False))
+
+    # Defensive check: Ensure at least two regions have actual data
+    valid_regions_count = len(df[df["Coverage"] > 0])
+    
+    if valid_regions_count < 2:
+        print("\nWARNING: Less than two regions have valid data.")
+        print("Composite ranking and cross-region trade ideas are not reliable until more data is added.")
+        trades = pd.DataFrame(columns=["Idea_ID", "Trade_Type", "Long_Leg", "Short_Leg", "Primary_Driver"])
+    else:
+        trades = build_trade_ideas(df)
+        print("\n--- Generated Trade Signals ---")
+        print(tabulate(trades, headers='keys', tablefmt='psql', showindex=False))
+
+    # Output generation
     df.to_csv(OUTPUT_DIR / "final_composite_score_table.csv", index=False)
     df[["Rank", "Region", "Composite_Score_Adjusted", "Coverage", "Trade_Action"]].to_csv(
         OUTPUT_DIR / "regional_rankings.csv", index=False
